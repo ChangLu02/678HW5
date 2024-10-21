@@ -1,0 +1,244 @@
+---
+title: "MA678 Homework 5"
+author: "Chang Lu"
+date: "10/25/2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 15.1 Poisson and negative binomial regression
+The folder `RiskyBehavior` contains data from a randomized trial targeting couples at high risk of HIV infection. The intervention provided counseling sessions regarding practices that could reduce their likelihood of contracting HIV. Couples were randomized either to a control group, a group in which just the woman participated, or a group in which both members of the couple participated. One of the outcomes examined after three months was "number of unprotected sex acts."  
+
+### a) 
+Model this outcome as a function of treatment assignment using a Poisson regression. Does the model fit well? Is there evidence of overdispersion?  
+
+```{r}
+library(MASS)
+```
+
+```{r}
+data <- read.csv("risky.csv")
+data$fupacts <- round(data$fupacts)
+
+poisson_model <- glm(fupacts ~ couples + women_alone, family = poisson, data = data)
+
+summary(poisson_model)
+
+# Check for overdispersion
+dispersion <- sum(residuals(poisson_model, type = "deviance")^2) / poisson_model$df.residual
+dispersion
+```
+
+No, the model doesn't fit well. For the calculated dispersion coefficient is 29.99, which is much greater than 1. This indicates strong evidence of overdispersion.
+
+### b) 
+Next extend the model to include pre-treatment measures of the outcome and the additional pre-treatment variables included in the dataset. Does the model fit well? Is there evidence of overdispersion?  
+
+```{r}
+extended_poisson_model <- glm(fupacts ~ couples + women_alone + bupacts + bs_hiv, family = poisson, data = data)
+
+summary(extended_poisson_model)
+
+dispersion1 <-  sum(residuals(extended_poisson_model, type = "deviance")^2) / extended_poisson_model$df.residual
+
+dispersion1
+```
+
+No. The calculated dispersion coeffcient is still greater than 1, indicating overdispersion.
+
+### c) 
+Fit a negative binomial (overdispersed Poisson) model. What do you conclude regarding effectiveness of the intervention?
+
+```{r}
+neg_binom_model <- glm.nb(fupacts ~ couples + women_alone + bupacts + bs_hiv, data = data)
+
+
+summary(neg_binom_model)
+```
+
+The intervention where only the woman participated in the counseling sessions significantly reduced the number of unprotected sex acts (p = 0.000199).
+
+The intervention where both partners participated (couples) showed a reduction in unprotected sex acts, but this was not statistically significant (p = 0.064).
+
+Participants who were HIV-positive or had more unprotected sex acts before the intervention also exhibited notable differences in behavior post-intervention.
+
+### d) 
+These data include responses from both men and women from the participating couples. Does this give you any concern with regard to our modeling assumptions? 
+In regression models (including Poisson and negative binomial models), one of the assumptions is that the observations are independent of each other. However, in this dataset, men and women from the same couple are likely to influence each other’s behaviors (e.g., the number of unprotected sex acts). Therefore, responses from the same couple may be correlated, violating this independence assumption.
+
+## 15.3 Binomial regression
+Redo the basketball shooting example on page 270, making some changes:  
+
+### (a) 
+Instead of having each player shoot 20 times, let the number of shots per player vary, drawn from the uniform distribution between 10 and 30.  
+```{r}
+set.seed(123)
+
+N <- 100
+
+height <- rnorm(N, 72, 3)
+
+n <- round(runif(N, min = 10, max = 30))
+
+p <- 0.4 + 0.1 * (height - 72) / 3  
+
+y <- rbinom(N, n, p)
+
+data2 <- data.frame(n = n, y = y, height = height)
+
+head(data2)
+
+```
+
+### (b) 
+Instead of having the true probability of success be linear, have the true probability be a logistic function, set so that Pr(success) = 0.3 for a player who is 5'9" and 0.4 for a 6' tall player. 
+
+```{r}
+logistic <- function(x) {
+  exp(x) / (1 + exp(x))
+}
+
+# Set the true probability of success using a logistic function
+# Height of 69 inches corresponds to a probability of 0.3 and 72 inches to 0.4
+logit_p <- -2 + 0.1 * (height - 69)
+p <- logistic(logit_p)
+
+# Simulate the number of successes
+y <- rbinom(N, n, p)
+
+data3 <- data.frame(n = n, y = y, height = height)
+
+fit <- glm(cbind(y, n - y) ~ height, family = binomial(link = "logit"), data = data3)
+
+summary(fit)
+
+```
+
+
+## 15.7 Tobit model for mixed discrete/continuous data
+Experimental data from the National Supported  Work example are in the folder `Lalonde`. Use the treatment indicator and pre-treatment variables to predict post-treatment (1978) earnings using a Tobit model. Interpret the model coefficients. 
+
+```{r}
+library("AER")
+library("haven")
+NSW_dw_obs <- read_dta("NSW_dw_obs.dta")
+head(NSW_dw_obs)
+
+tobit_model <- tobit(re78 ~ treat + age + educ + re74 + re75, data = NSW_dw_obs, left = 0)
+
+summary(tobit_model)
+
+```
+### Coefficients
+Intercept (6004):
+
+The estimated latent earnings for a participant in the control group (no treatment), assuming all other variables are 0. This is not always a meaningful figure, since the value of the predictor variables would rarely all be zero in practice, but it serves as the baseline from which the other variables' effects are measured.
+
+treat (485.9):
+
+The treatment coefficient is 485.9, but it is not statistically significant (p = 0.458). This suggests that being in the treatment group did not significantly affect post-treatment earnings compared to the control group after controlling for other variables like age, education, and past earnings.
+age (-159.5):
+
+For each additional year of age, post-treatment earnings decrease by 159.5 units (or dollars, assuming earnings are in dollars). This is statistically significant (p < 2e-16), meaning older participants generally earned less in 1978, controlling for other variables.
+educ (105.9):
+
+Each additional year of education is associated with an increase in earnings of about 105.9 units. This effect is statistically significant (p = 3.25e-06), indicating that more years of education tend to increase post-treatment earnings.
+re74 (0.3365):
+
+Earnings in 1974 have a significant positive effect on 1978 earnings. For every one-unit increase in 1974 earnings, 1978 earnings increase by 0.3365 units. This suggests a strong correlation between pre-treatment and post-treatment earnings, and it's highly significant (p < 2e-16).
+re75 (0.5680):
+
+Similar to re74, earnings in 1975 have a highly significant positive effect on earnings in 1978. For every one-unit increase in 1975 earnings, 1978 earnings increase by 0.5680 units. This is also very significant (p < 2e-16).
+Log(scale) (9.046):
+
+This is related to the standard deviation of the error term in the Tobit model. A larger value suggests more variation around the predicted values, and it is statistically significant, but it’s more of a technical parameter than one of substantive interest.
+
+### Model Fit:
+Scale (8487):
+
+This is the estimated standard deviation (scale parameter) of the latent variable. It indicates that the model assumes considerable variability in earnings.
+
+Log-likelihood (-171,700):
+
+This is a measure of model fit, with larger (less negative) values indicating a better fit. It’s useful for comparing different models, but on its own, it doesn’t provide much insight.
+
+Wald-statistic (17,660, p < 2.22e-16):
+
+The Wald test assesses the overall significance of the model. The very high Wald-statistic and extremely small p-value suggest that the model as a whole is highly significant, meaning that at least one of the predictors significantly affects earnings in 1978.
+
+
+
+## 15.8 Robust linear regression using the t model
+The folder `Congress` has the votes for the Democratic and Republican candidates in each U.S. congressional district in 1988, along with the parties' vote proportions in 1986 and an indicator for whether the incumbent was running for reelection in 1988. For your analysis, just use the elections that were contested by both parties in both years.  
+
+```{r}
+```
+
+### (a) 
+Fit a linear regression using `stan_glm` with the usual normal-distribution model for the errors predicting 1988 Democratic vote share from the other variables and assess model fit.
+
+```{r}
+```
+
+### (b) 
+Fit the same sort of model using the `brms` package with a $t$ distribution, using the `brm` function with the student family. Again assess model fit.  
+
+```{r}
+```
+
+### (c) 
+Which model do you prefer? 
+
+
+## 15.9 Robust regression for binary data using the robit model
+Use the same data as the previous example with the goal instead of predicting for each district whether it was won by the Democratic or Republican candidate.  
+
+### (a) 
+Fit a standard logistic or probit regression and assess model fit.
+
+```{r}
+```
+
+### (b) 
+Fit a robit regression and assess model fit.
+
+```{r}
+```
+
+### (c) 
+Which model do you prefer? 
+
+
+## 15.14 Model checking for count data
+The folder `RiskyBehavior` contains data from a study of behavior of couples at risk for HIV; see Exercise 15.1. 
+
+### (a) 
+Fit a Poisson regression predicting number of unprotected sex acts from baseline HIV status. Perform predictive simulation to generate 1000 datasets and record the percentage of observations that are equal to 0 and the percentage that are greater than 10 (the third quartile in the observed data) for each. Compare these to the observed value in the original data.
+
+```{r}
+```
+
+### (b) 
+Repeat (a) using a negative binomial (overdispersed Poisson) regression.
+
+```{r}
+```
+
+### (c) 
+Repeat (b), also including ethnicity and baseline number of unprotected sex acts as inputs.
+
+```{r}
+```
+
+
+## 15.15 Summarizing inferences and predictions using simulation
+Exercise 15.7 used a Tobit model to fit a regression with an outcome that had mixed discrete and continuous data. In this exercise you will revisit these data and build a two-step model: 
+(1) logistic regression for zero earnings versus positive earnings, and 
+(2) linear regression for level of earnings given earnings are positive. 
+Compare predictions that result from each of these models with each other. 
+
+```{r}
+```
