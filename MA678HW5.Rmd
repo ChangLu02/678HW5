@@ -175,23 +175,49 @@ The Wald test assesses the overall significance of the model. The very high Wald
 The folder `Congress` has the votes for the Democratic and Republican candidates in each U.S. congressional district in 1988, along with the parties' vote proportions in 1986 and an indicator for whether the incumbent was running for reelection in 1988. For your analysis, just use the elections that were contested by both parties in both years.  
 
 ```{r}
+library(rstanarm)
+library(brms)
+
+congress_data <- read.csv("congress.csv")
 ```
 
 ### (a) 
 Fit a linear regression using `stan_glm` with the usual normal-distribution model for the errors predicting 1988 Democratic vote share from the other variables and assess model fit.
 
 ```{r}
+# Fit a linear regression model using stan_glm
+model_stan <- stan_glm(v88 ~ v86 + inc88, data = congress_data, family = gaussian, refresh = 0)
+
+# Assess model fit
+summary(model_stan)
 ```
+The average predicted value of the outcome variable (v88) is 0.6, which means that the average prediction for v88 is 60%, indicating that the model predicts a Democratic vote share of around 60% on average across all districts.
+
 
 ### (b) 
 Fit the same sort of model using the `brms` package with a $t$ distribution, using the `brm` function with the student family. Again assess model fit.  
 
 ```{r}
+# Fit the model using the brm function and a Student's t-distribution
+model_brms <- brm(v88 ~ v86 + inc88, 
+                  data = congress_data, 
+                  family = student(),  # Using the t-distribution
+                  chains = 4,          # Number of MCMC chains
+                  iter = 2000,         # Number of iterations per chain
+                  warmup = 1000,       # Number of warm-up iterations
+                  cores = 6)          
+
+summary(model_brms)
+
 ```
 
 ### (c) 
 Which model do you prefer? 
-
+```{r}
+pp_check(model_stan)
+pp_check(model_brms)
+```
+Second Plot appears to represent a better fit overall because the predicted values (y_rep) align more closely with the observed data (y) across the main distribution.
 
 ## 15.9 Robust regression for binary data using the robit model
 Use the same data as the previous example with the goal instead of predicting for each district whether it was won by the Democratic or Republican candidate.  
